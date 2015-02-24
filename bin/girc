@@ -1,0 +1,95 @@
+#!/usr/bin/env ruby
+
+require 'json'
+require 'cmdparser'
+require 'fileutils'
+require_relative '../lib/gir.rb'
+
+def show_git_wrapper gitpath
+  print <<-EOS
+gir(){
+  gitpath=#{gitpath}
+  if [ -e #{gir} ]; then
+    girc git $@
+  else
+    $gitpath $@
+  fi
+}
+EOS
+end
+
+def gitconfig
+  Git::get_local_repo_dir('./.git/config')
+end
+
+def gir
+  Git::get_local_repo_dir('.gir',safe = true)
+end
+
+def sshkey username
+  Gir::user_file(username,Gir::SSH_KEY)
+end
+
+CmdParser.new{
+
+  on 'git' do
+    profile = JSON.load(File.read(gir))
+    system "GIT_KEY=#{sshkey(profile['user'])} GIT_SSH=#{Gir::script_path(Gir::GIT_SSH)} #{ARGV.join(' ')}"
+  end
+  
+  on 'add' do |user|
+    # replace checking
+    Gir::get_gir_home
+    unless user && user != ''
+      puts '-> girc add user'
+      exit
+    end
+    
+    has_profile = Gir::has_profile? user
+    unless has_profile
+      Gir::create_gir_user(user)
+    end
+  end
+  
+  on 'local' do |user|
+    profile = {
+      :user => user
+    }
+    open(gir, 'w') do |fp|
+      JSON.dump(profile, fp)
+    end
+    # have git repository and have user config
+    # if true, merge user config with git repository's config 
+    if !!gitconfig && FileTest.exists?(gitconfig) && FileTest.exists?(Gir::user_file(user,Gir::GIT_CONFIG))
+      config = GitConfigIO::load(Gir::user_file(user,Gir::GIT_CONFIG))
+      GitConfigIO::merge!(gitconfig,config)
+    elsif !FileTest.exists?(Gir::user_file(user,Gir::GIT_CONFIG))
+      puts "-> girc add #{user}" 
+    else
+      puts "can't patch local gitconfig"
+      puts "-> git clone repo && cd repo && girc local #{user}"
+    end
+  end
+  
+  on 'init' do |option|
+    if '-' == option
+      git_path = `which git`.chomp
+      if git_path.length == 0
+        puts 'install git'
+        exit
+      end
+      show_git_wrapper(git_path)
+    end
+  end
+  
+  on 'install' do
+    @install_proc = Proc.new do |path = '~/.gir'|
+      Gir::install(path)
+    end
+    @install_proc.call unless ARGV.include? '--prefix'
+  end
+  
+  on 'install','--prefix' do |path = '~/gir'|
+    @install_proc.call path
+  end
+}.invoke
