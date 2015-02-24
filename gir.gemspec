@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.email         = ["boom.boom.planet@gmail.com"]
   spec.summary       = %q{GIT_SSH wrapper}
   spec.description   = %q{change git user}
-  spec.homepage      = "https://github.com/mocchit"
+  spec.homepage      = "https://github.com/mocchit/gir"
   spec.license       = "GPLv3"
 
   spec.files         = `git ls-files -z`.split("\x0")
